@@ -28,6 +28,7 @@
 #include <sstream>
 #include <string>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <inttypes.h>
 #include <pthread.h>
 #include <poll.h>
@@ -192,6 +193,7 @@ CameraService::CameraService(
         AttributionAndPermissionUtilsEncapsulator(attributionAndPermissionUtils == nullptr ?
                 std::make_shared<AttributionAndPermissionUtils>()\
                 : attributionAndPermissionUtils),
+        mPhysicalFrontCamStatus(false),
         mCameraServiceProxyWrapper(cameraServiceProxyWrapper == nullptr ?
                 std::make_shared<CameraServiceProxyWrapper>() : cameraServiceProxyWrapper),
         mEventLog(DEFAULT_EVENT_LOG_LENGTH),
@@ -2798,6 +2800,7 @@ Status CameraService::connectHelper(const sp<CALLBACK>& cameraCb, const std::str
             mServiceLock.lock();
         } else {
             // Otherwise, add client to active clients list
+            physicalFrontCam(cameraId == "1");
             finishConnectLocked(client, partial, oomScoreOffset, systemNativeClient);
         }
 
@@ -2922,6 +2925,27 @@ status_t CameraService::addOfflineClient(const std::string &cameraId,
     } // lock is destroyed, allow further connect calls
 
     return OK;
+}
+
+void CameraService::physicalFrontCam(bool on) {
+    if(on == mPhysicalFrontCamStatus) return;
+    mPhysicalFrontCamStatus = on;
+
+    if(access("/dev/asusMotoDrv", F_OK) == 0) {
+        int pid = fork();
+        if(pid == 0) {
+            const char* cmd[] = {
+                "/system/bin/asus-motor",
+                "0",
+                NULL
+            };
+            cmd[1] = on ? "0" : "1";
+            execve("/system/bin/asus-motor", (char**)cmd, environ);
+            _exit(1);
+        } else {
+            waitpid(pid, NULL, 0);
+        }
+    }
 }
 
 Status CameraService::turnOnTorchWithStrengthLevel(const std::string& unresolvedCameraId,
@@ -4290,6 +4314,8 @@ binder::Status CameraService::BasicClient::disconnect() {
         return res;
     }
     mDisconnected = true;
+
+    sCameraService->physicalFrontCam(false);
 
     sCameraService->removeByClient(this);
     sCameraService->logDisconnected(mCameraIdStr, mCallingPid, getPackageName());
