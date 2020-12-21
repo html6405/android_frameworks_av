@@ -337,7 +337,9 @@ std::vector<std::string> CameraProviderManager::getAPI1CompatibleCameraDeviceIds
         // API1 app doesn't handle logical and physical camera devices well. So
         // for each camera facing, only take the first id advertised by HAL in
         // all [logical, physical1, physical2, ...] id combos, and filter out the rest.
-        filterLogicalCameraIdsLocked(providerDeviceIds);
+        if(!property_get_bool("persist.sys.phh.include_all_cameras", false)) {
+            filterLogicalCameraIdsLocked(providerDeviceIds);
+        }
         collectDeviceIdsLocked(providerDeviceIds, publicDeviceIds, systemDeviceIds);
     }
     auto sortFunc =
@@ -1157,10 +1159,12 @@ SystemCameraKind CameraProviderManager::ProviderInfo::DeviceInfo3::getSystemCame
 
     // Go through the capabilities and check if it has
     // ANDROID_REQUEST_AVAILABLE_CAPABILITIES_SYSTEM_CAMERA
-    for (size_t i = 0; i < entryCap.count; ++i) {
-        uint8_t capability = entryCap.data.u8[i];
-        if (capability == ANDROID_REQUEST_AVAILABLE_CAPABILITIES_SYSTEM_CAMERA) {
-            return SystemCameraKind::SYSTEM_ONLY_CAMERA;
+    if(!property_get_bool("persist.sys.phh.include_all_cameras", false)) {
+        for (size_t i = 0; i < entryCap.count; ++i) {
+            uint8_t capability = entryCap.data.u8[i];
+            if (capability == ANDROID_REQUEST_AVAILABLE_CAPABILITIES_SYSTEM_CAMERA) {
+                return SystemCameraKind::SYSTEM_ONLY_CAMERA;
+            }
         }
     }
     return SystemCameraKind::PUBLIC;
