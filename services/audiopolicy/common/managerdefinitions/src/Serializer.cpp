@@ -670,7 +670,7 @@ std::variant<status_t, RouteTraits::Element> PolicySerializer::deserialize<Route
                 source = ctx->findPortByTagName(trim(devTag));
             }
             if (source == NULL) {
-                if (!mIgnoreVendorExtensions) {
+                if (false && !mIgnoreVendorExtensions) {
                     ALOGE("%s: no source found with name \"%s\"", __func__, devTag);
                     return BAD_VALUE;
                 } else {
