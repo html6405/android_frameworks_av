@@ -217,6 +217,9 @@ cc_library_shared {
             target_omx_legacy_rescaling: {
                 cppflags: ["-DUSE_LEGACY_RESCALING"],
             },
+            disable_reallocate_omx_buffers: {
+                cppflags: ["-DBOARD_CANT_REALLOCATE_OMX_BUFFERS"],
+            },
         },
     },
 
