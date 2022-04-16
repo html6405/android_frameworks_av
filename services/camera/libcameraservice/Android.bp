@@ -88,6 +88,8 @@ cc_defaults {
         "android.hardware.camera.device@3.5",
         "android.hardware.camera.device@3.6",
         "android.hardware.camera.device@3.7",
+        "vendor.samsung.hardware.camera.device@5.0",
+        "vendor.samsung.hardware.camera.device@4.0",
         "android.hardware.common-V2-ndk",
         "android.hardware.common-V2-cpp",
         "android.hardware.common.fmq-V1-ndk",
