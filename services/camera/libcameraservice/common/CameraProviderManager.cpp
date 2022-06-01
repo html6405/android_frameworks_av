@@ -45,6 +45,7 @@
 #include <functional>
 #include <camera_metadata_hidden.h>
 #include <android-base/parseint.h>
+#include <android-base/properties.h>
 #include <android-base/logging.h>
 #include <android/content/res/CameraCompatibilityInfo.h>
 #include <cutils/properties.h>
@@ -287,6 +288,15 @@ std::vector<std::string> CameraProviderManager::getCameraDeviceIds(std::unordere
             }
         }
     }
+
+    int32_t altPrimaryCamera = property_get_int32("persist.sys.alt_primary_camera", 0);
+
+    if (altPrimaryCamera != 0 && deviceIds.size() > (size_t) altPrimaryCamera) {
+        const std::string origPrimary = deviceIds[0];
+        deviceIds[0] = deviceIds[altPrimaryCamera];
+        deviceIds[altPrimaryCamera] = origPrimary;
+    }
+
     return deviceIds;
 }
 
@@ -353,6 +363,18 @@ std::vector<std::string> CameraProviderManager::getAPI1CompatibleCameraDeviceIds
     std::sort(systemDeviceIds.begin(), systemDeviceIds.end(), sortFunc);
     deviceIds.insert(deviceIds.end(), publicDeviceIds.begin(), publicDeviceIds.end());
     deviceIds.insert(deviceIds.end(), systemDeviceIds.begin(), systemDeviceIds.end());
+
+    // Default camera ID hack should match with android.hardware.camera2.CameraManager.sortCameraIds
+    // Note that the alt primary camera may not be available here due to filterLogicalCameraIdsLocked()
+    // in which case we will just ignore it.
+    int altPrimaryCameraId = base::GetIntProperty("persist.sys.alt_primary_camera", -1);
+
+    if (altPrimaryCameraId > 0 && altPrimaryCameraId < (int) deviceIds.size()) {
+        std::string origPrimary = deviceIds[0];
+        deviceIds[0] = deviceIds[altPrimaryCameraId];
+        deviceIds[altPrimaryCameraId] = origPrimary;
+    }
+
     return deviceIds;
 }
 
