@@ -74,6 +74,7 @@ cc_library_shared {
         "ICamera.cpp",
         "ICameraClient.cpp",
         "ICameraRecordingProxy.cpp",
+        "ICameraRecordingProxyListener.cpp",
         "camera2/CaptureRequest.cpp",
         "camera2/ConcurrentCamera.cpp",
         "camera2/OutputConfiguration.cpp",
@@ -147,8 +148,6 @@ filegroup {
         "aidl/android/hardware/camera2/ICameraDeviceCallbacks.aidl",
         "aidl/android/hardware/camera2/ICameraDeviceUser.aidl",
         "aidl/android/hardware/camera2/ICameraOfflineSession.aidl",
-        "aidl/android/hardware/camera2/ICameraInjectionCallback.aidl",
-        "aidl/android/hardware/camera2/ICameraInjectionSession.aidl",
     ],
     path: "aidl",
 }
