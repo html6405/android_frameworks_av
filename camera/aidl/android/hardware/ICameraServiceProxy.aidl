@@ -48,5 +48,5 @@ interface ICameraServiceProxy
     /**
      * Checks if the camera has been disabled via device policy.
      */
-    boolean isCameraDisabled(int userId);
+    boolean isCameraDisabled();
 }
