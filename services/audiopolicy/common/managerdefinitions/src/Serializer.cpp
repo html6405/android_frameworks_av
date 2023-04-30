@@ -662,6 +662,9 @@ std::variant<status_t, RouteTraits::Element> PolicySerializer::deserialize<Route
     }
     route->setSink(sink);
 
+    // This fixes broken mic while video record on some Exynos devices
+    bool disableBackMic = property_get_bool("persist.sys.phh.disable_back_mic", false);
+
     std::string sourcesAttr = getXmlAttribute(cur, Attributes::sources);
     if (sourcesAttr.empty()) {
         ALOGE("%s: No %s found", __func__, Attributes::sources);
@@ -677,6 +680,10 @@ std::variant<status_t, RouteTraits::Element> PolicySerializer::deserialize<Route
             sp<PolicyAudioPort> source = ctx->findPortByTagName(devTag);
             if (source == NULL) {
                 source = ctx->findPortByTagName(trim(devTag));
+            }
+            if (disableBackMic && strcmp(devTag, "Built-In Back Mic") == 0) {
+                ALOGW("Skipping route source \"%s\" as it breaks video recording mic", devTag);
+                source = NULL;
             }
             if (source == NULL) {
                 if (false && !mIgnoreVendorExtensions) {
