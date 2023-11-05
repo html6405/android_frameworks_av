@@ -669,6 +669,9 @@ std::variant<status_t, RouteTraits::Element> PolicySerializer::deserialize<Route
     // This fixes broken mic while video record on some Exynos devices
     bool disableBackMic = property_get_bool("persist.sys.phh.disable_back_mic", false);
 
+    // This may fix echo or non-working audio on calls
+    bool disableVoiceCallIn = property_get_bool("persist.sys.phh.disable_voice_call_in", false);
+
     std::string sourcesAttr = getXmlAttribute(cur, Attributes::sources);
     if (sourcesAttr.empty()) {
         ALOGE("%s: No %s found", __func__, Attributes::sources);
@@ -685,10 +688,16 @@ std::variant<status_t, RouteTraits::Element> PolicySerializer::deserialize<Route
             if (source == NULL) {
                 source = ctx->findPortByTagName(trim(devTag));
             }
+
             if (disableBackMic && strcmp(devTag, "Built-In Back Mic") == 0) {
                 ALOGW("Skipping route source \"%s\" as it breaks video recording mic", devTag);
                 source = NULL;
+            } else if (disableVoiceCallIn && strcmp(devTag, "Voice Call In") == 0 &&
+                      (sinkAttr == "voice tx" || sinkAttr == "voice_tx")) {
+                ALOGW("Skipping route source \"%s\" as it breaks audio on calls", devTag);
+                source = NULL;
             }
+
             if (source == NULL) {
                 if (false && !mIgnoreVendorExtensions) {
                     ALOGE("%s: no source found with name \"%s\"", __func__, devTag);
