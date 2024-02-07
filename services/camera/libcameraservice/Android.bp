@@ -120,6 +120,7 @@ cc_defaults {
         "android.hardware.camera.provider-V3-ndk",
         "vendor.samsung.hardware.camera.provider@3.0",
         "vendor.samsung.hardware.camera.provider@4.0",
+        "vendor.samsung.hardware.camera.provider-V1-ndk",
         "libaidlcommonsupport",
         "libbinderthreadstateutils",
         "libcameraservice_device_independent",

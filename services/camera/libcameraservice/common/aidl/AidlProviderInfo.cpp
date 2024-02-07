@@ -34,6 +34,8 @@
 #include <utils/SessionConfigurationUtils.h>
 #include <utils/Trace.h>
 
+#include <aidl/vendor/samsung/hardware/camera/provider/ISehCameraProvider.h>
+
 namespace {
 const bool kEnableLazyHal(property_get_bool("ro.camera.enableLazyHal", false));
 } // anonymous namespace
@@ -174,6 +176,25 @@ status_t AidlProviderInfo::initializeAidlProvider(
         ALOGE("%s: Transaction error in getting camera ID list from provider '%s': %s",
                 __FUNCTION__, mProviderName.c_str(), status.getMessage());
         return mapToStatusT(status);
+    }
+
+    if(true) {
+        AIBinder *ext;
+        auto spaibinder = interface->asBinder();
+
+        status_t ret = AIBinder_getExtension(spaibinder.get(), &ext);
+        ALOGE("Grabbing CameraProvider extension got %d", ret);
+        if (ret == android::OK) {
+            using aidl::vendor::samsung::hardware::camera::provider::ISehCameraProvider;
+            std::shared_ptr<ISehCameraProvider> provider = ISehCameraProvider::fromBinder(ndk::SpAIBinder(ext));
+            ALOGE("Trying to get ISehCameraProvider...");
+            if (provider != nullptr) {
+                ALOGE("Got it!");
+                if(property_get_bool("persist.sys.phh.samsung.camera_ids", false)) {
+                    provider->getCameraIdListAll(&retDevices);
+                }
+            }
+        }
     }
 
     for (auto& name : retDevices) {
