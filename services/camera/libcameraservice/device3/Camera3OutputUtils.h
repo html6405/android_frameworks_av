@@ -117,7 +117,7 @@ namespace camera3 {
     // Camera3Device/Camera3OfflineSession internal states used in notify/processCaptureResult
     // callbacks
     struct CaptureOutputStates {
-        const std::string& cameraId;
+        const String8& cameraId;
         std::mutex& inflightLock;
         int64_t& lastCompletedRegularFrameNumber;
         int64_t& lastCompletedReprocessFrameNumber;
@@ -162,7 +162,7 @@ namespace camera3 {
     void notify(CaptureOutputStates& states, const camera_notify_msg *msg);
 
     struct RequestBufferStates {
-        const std::string& cameraId;
+        const String8& cameraId;
         std::mutex& reqBufferLock; // lock to serialize request buffer calls
         const bool useHalBufManager;
         const std::set<int32_t > &halBufManagedStreamIds;
@@ -174,7 +174,7 @@ namespace camera3 {
     };
 
     struct ReturnBufferStates {
-        const std::string& cameraId;
+        const String8& cameraId;
         const bool useHalBufManager;
         const std::set<int32_t > &halBufManagedStreamIds;
         StreamSet& outputStreams;
@@ -183,7 +183,7 @@ namespace camera3 {
     };
 
     struct FlushInflightReqStates {
-        const std::string& cameraId;
+        const String8& cameraId;
         std::mutex& inflightLock;
         InFlightRequestMap& inflightMap; // end of inflightLock scope
         const bool useHalBufManager;

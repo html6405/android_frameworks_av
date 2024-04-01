@@ -26,7 +26,7 @@
 #endif
 
 // Convenience macro for transient errors
-#define CLOGE(fmt, ...) ALOGE("Camera %s: %s: " fmt, mId.c_str(), __FUNCTION__, \
+#define CLOGE(fmt, ...) ALOGE("Camera %s: %s: " fmt, mId.string(), __FUNCTION__, \
             ##__VA_ARGS__)
 
 // Convenience macros for transitioning to the error state
@@ -46,8 +46,6 @@
 #include <utils/Trace.h>
 #include <utils/Timers.h>
 #include <cutils/properties.h>
-#include <camera/StringUtils.h>
-#include <com_android_internal_camera_flags.h>
 
 #include <android/hardware/camera/device/3.7/ICameraInjectionSession.h>
 #include <android/hardware/camera2/ICameraDeviceUser.h>
@@ -67,7 +65,6 @@ using namespace android::camera3;
 using namespace android::hardware::camera;
 using namespace android::hardware::camera::device::V3_2;
 using android::hardware::camera::metadata::V3_6::CameraMetadataEnumAndroidSensorPixelMode;
-namespace flags = com::android::internal::camera::flags;
 
 namespace android {
 
@@ -143,12 +140,12 @@ uint64_t HidlCamera3Device::mapProducerToFrameworkUsage(
 }
 
 status_t HidlCamera3Device::initialize(sp<CameraProviderManager> manager,
-        const std::string& monitorTags) {
+        const String8& monitorTags) {
     ATRACE_CALL();
     Mutex::Autolock il(mInterfaceLock);
     Mutex::Autolock l(mLock);
 
-    ALOGV("%s: Initializing HIDL device for camera %s", __FUNCTION__, mId.c_str());
+    ALOGV("%s: Initializing HIDL device for camera %s", __FUNCTION__, mId.string());
     if (mStatus != STATUS_UNINITIALIZED) {
         CLOGE("Already initialized!");
         return INVALID_OPERATION;
@@ -157,7 +154,7 @@ status_t HidlCamera3Device::initialize(sp<CameraProviderManager> manager,
 
     sp<ICameraDeviceSession> session;
     ATRACE_BEGIN("CameraHal::openSession");
-    status_t res = manager->openHidlSession(mId, this,
+    status_t res = manager->openHidlSession(mId.string(), this,
             /*out*/ &session);
     ATRACE_END();
     if (res != OK) {
@@ -165,17 +162,17 @@ status_t HidlCamera3Device::initialize(sp<CameraProviderManager> manager,
         return res;
     }
 
-    res = manager->getCameraCharacteristics(mId, mOverrideForPerfClass, &mDeviceInfo,
+    res = manager->getCameraCharacteristics(mId.string(), mOverrideForPerfClass, &mDeviceInfo,
             /*overrideToPortrait*/false);
     if (res != OK) {
         SET_ERR_L("Could not retrieve camera characteristics: %s (%d)", strerror(-res), res);
         session->close();
         return res;
     }
-    mSupportNativeZoomRatio = manager->supportNativeZoomRatio(mId);
+    mSupportNativeZoomRatio = manager->supportNativeZoomRatio(mId.string());
 
     std::vector<std::string> physicalCameraIds;
-    bool isLogical = manager->isLogicalCamera(mId, &physicalCameraIds);
+    bool isLogical = manager->isLogicalCamera(mId.string(), &physicalCameraIds);
     if (isLogical) {
         for (auto& physicalId : physicalCameraIds) {
             // Do not override characteristics for physical cameras
@@ -274,17 +271,17 @@ status_t HidlCamera3Device::initialize(sp<CameraProviderManager> manager,
     mInterface = new HidlHalInterface(session, queue, mUseHalBufManager, mSupportOfflineProcessing);
 
     std::string providerType;
-    mVendorTagId = manager->getProviderTagIdLocked(mId);
+    mVendorTagId = manager->getProviderTagIdLocked(mId.string());
     mTagMonitor.initialize(mVendorTagId);
-    if (!monitorTags.empty()) {
-        mTagMonitor.parseTagsToMonitor(monitorTags);
+    if (!monitorTags.isEmpty()) {
+        mTagMonitor.parseTagsToMonitor(String8(monitorTags));
     }
 
     // Metadata tags needs fixup for monochrome camera device version less
     // than 3.5.
     hardware::hidl_version maxVersion{0,0};
     IPCTransport transport = IPCTransport::HIDL;
-    res = manager->getHighestSupportedVersion(mId, &maxVersion, &transport);
+    res = manager->getHighestSupportedVersion(mId.string(), &maxVersion, &transport);
     if (res != OK) {
         ALOGE("%s: Error in getting camera device version id: %s (%d)",
                 __FUNCTION__, strerror(-res), res);
@@ -309,8 +306,7 @@ hardware::Return<void> HidlCamera3Device::requestStreamBuffers(
         const hardware::hidl_vec<hardware::camera::device::V3_5::BufferRequest>& bufReqs,
         requestStreamBuffers_cb _hidl_cb) {
     RequestBufferStates states {
-        mId, mRequestBufferInterfaceLock, mUseHalBufManager, mHalBufManagedStreamIds,
-        mOutputStreams, mSessionStatsBuilder,
+        mId, mRequestBufferInterfaceLock, mUseHalBufManager, mOutputStreams, mSessionStatsBuilder,
         *this, *mInterface, *this};
     camera3::requestStreamBuffers(states, bufReqs, _hidl_cb);
     return hardware::Void();
@@ -319,8 +315,7 @@ hardware::Return<void> HidlCamera3Device::requestStreamBuffers(
 hardware::Return<void> HidlCamera3Device::returnStreamBuffers(
         const hardware::hidl_vec<hardware::camera::device::V3_2::StreamBuffer>& buffers) {
     ReturnBufferStates states {
-        mId, mUseHalBufManager, mHalBufManagedStreamIds, mOutputStreams,
-        mSessionStatsBuilder, *mInterface};
+        mId, mUseHalBufManager, mOutputStreams, mSessionStatsBuilder, *mInterface};
     camera3::returnStreamBuffers(states, buffers);
     return hardware::Void();
 }
@@ -366,7 +361,7 @@ hardware::Return<void> HidlCamera3Device::processCaptureResult_3_4(
         mNextReprocessShutterFrameNumber, mNextZslStillShutterFrameNumber,
         mNextResultFrameNumber,
         mNextReprocessResultFrameNumber, mNextZslStillResultFrameNumber,
-        mUseHalBufManager, mHalBufManagedStreamIds, mUsePartialResult, mNeedFixupMonochromeTags,
+        mUseHalBufManager, mUsePartialResult, mNeedFixupMonochromeTags,
         mNumPartialResults, mVendorTagId, mDeviceInfo, mPhysicalDeviceInfoMap,
         mDistortionMappers, mZoomRatioMappers, mRotateAndCropMappers,
         mTagMonitor, mInputStream, mOutputStreams, mSessionStatsBuilder, listener, *this, *this,
@@ -421,7 +416,7 @@ hardware::Return<void> HidlCamera3Device::processCaptureResult(
     }
 
     HidlCaptureOutputStates states {
-      { mId,
+      {mId,
         mInFlightLock, mLastCompletedRegularFrameNumber,
         mLastCompletedReprocessFrameNumber, mLastCompletedZslFrameNumber,
         mInFlightMap, mOutputLock,  mResultQueue, mResultSignal,
@@ -429,7 +424,7 @@ hardware::Return<void> HidlCamera3Device::processCaptureResult(
         mNextReprocessShutterFrameNumber, mNextZslStillShutterFrameNumber,
         mNextResultFrameNumber,
         mNextReprocessResultFrameNumber, mNextZslStillResultFrameNumber,
-        mUseHalBufManager, mHalBufManagedStreamIds, mUsePartialResult, mNeedFixupMonochromeTags,
+        mUseHalBufManager, mUsePartialResult, mNeedFixupMonochromeTags,
         mNumPartialResults, mVendorTagId, mDeviceInfo, mPhysicalDeviceInfoMap,
         mDistortionMappers, mZoomRatioMappers, mRotateAndCropMappers,
         mTagMonitor, mInputStream, mOutputStreams, mSessionStatsBuilder, listener, *this, *this,
@@ -469,7 +464,7 @@ hardware::Return<void> HidlCamera3Device::notifyHelper(
     }
 
     HidlCaptureOutputStates states {
-      { mId,
+      {mId,
         mInFlightLock, mLastCompletedRegularFrameNumber,
         mLastCompletedReprocessFrameNumber, mLastCompletedZslFrameNumber,
         mInFlightMap, mOutputLock,  mResultQueue, mResultSignal,
@@ -477,7 +472,7 @@ hardware::Return<void> HidlCamera3Device::notifyHelper(
         mNextReprocessShutterFrameNumber, mNextZslStillShutterFrameNumber,
         mNextResultFrameNumber,
         mNextReprocessResultFrameNumber, mNextZslStillResultFrameNumber,
-        mUseHalBufManager, mHalBufManagedStreamIds, mUsePartialResult, mNeedFixupMonochromeTags,
+        mUseHalBufManager, mUsePartialResult, mNeedFixupMonochromeTags,
         mNumPartialResults, mVendorTagId, mDeviceInfo, mPhysicalDeviceInfoMap,
         mDistortionMappers, mZoomRatioMappers, mRotateAndCropMappers,
         mTagMonitor, mInputStream, mOutputStreams, mSessionStatsBuilder, listener, *this, *this,
@@ -645,14 +640,14 @@ status_t HidlCamera3Device::switchToOffline(
     // TODO: check if we need to lock before copying states
     //       though technically no other thread should be talking to Camera3Device at this point
     Camera3OfflineStates offlineStates(
-            mTagMonitor, mVendorTagId, mUseHalBufManager, mHalBufManagedStreamIds,
-            mNeedFixupMonochromeTags, mUsePartialResult, mNumPartialResults,
-            mLastCompletedRegularFrameNumber, mLastCompletedReprocessFrameNumber,
-            mLastCompletedZslFrameNumber, mNextResultFrameNumber,
-            mNextReprocessResultFrameNumber, mNextZslStillResultFrameNumber,
-            mNextShutterFrameNumber, mNextReprocessShutterFrameNumber,
-            mNextZslStillShutterFrameNumber, mDeviceInfo, mPhysicalDeviceInfoMap,
-            mDistortionMappers, mZoomRatioMappers, mRotateAndCropMappers);
+            mTagMonitor, mVendorTagId, mUseHalBufManager, mNeedFixupMonochromeTags,
+            mUsePartialResult, mNumPartialResults, mLastCompletedRegularFrameNumber,
+            mLastCompletedReprocessFrameNumber, mLastCompletedZslFrameNumber,
+            mNextResultFrameNumber, mNextReprocessResultFrameNumber,
+            mNextZslStillResultFrameNumber, mNextShutterFrameNumber,
+            mNextReprocessShutterFrameNumber, mNextZslStillShutterFrameNumber,
+            mDeviceInfo, mPhysicalDeviceInfoMap, mDistortionMappers,
+            mZoomRatioMappers, mRotateAndCropMappers);
 
     *session = new HidlCamera3OfflineSession(mId, inputStream, offlineStreamSet,
             std::move(bufferRecords), offlineReqs, offlineStates, offlineSession);
@@ -703,14 +698,6 @@ status_t HidlCamera3Device::switchToOffline(
     // Java side to make sure the CameraCaptureSession is properly closed
 }
 
-void HidlCamera3Device::applyMaxBatchSizeLocked(
-        RequestList* requestList, const sp<camera3::Camera3OutputStreamInterface>& stream) {
-    int batchSize = requestList->size();
-
-    (*requestList->begin())->mBatchSize = batchSize;
-    stream->setBatchSize(batchSize);
-}
-
 sp<Camera3Device::RequestThread> HidlCamera3Device::createNewRequestThread(
                 wp<Camera3Device> parent, sp<camera3::StatusTracker> statusTracker,
                 sp<Camera3Device::HalInterface> interface,
@@ -720,8 +707,7 @@ sp<Camera3Device::RequestThread> HidlCamera3Device::createNewRequestThread(
                 bool overrideToPortrait,
                 bool supportSettingsOverride) {
         return new HidlRequestThread(parent, statusTracker, interface, sessionParamKeys,
-                useHalBufManager, supportCameraMute, overrideToPortrait,
-                supportSettingsOverride);
+                useHalBufManager, supportCameraMute, overrideToPortrait, supportSettingsOverride);
 };
 
 sp<Camera3Device::Camera3DeviceInjectionMethods>
@@ -729,7 +715,7 @@ HidlCamera3Device::createCamera3DeviceInjectionMethods(wp<Camera3Device> parent)
     return new HidlCamera3DeviceInjectionMethods(parent);
 }
 
-status_t HidlCamera3Device::injectionCameraInitialize(const std::string &injectedCamId,
+status_t HidlCamera3Device::injectionCameraInitialize(const String8 &injectedCamId,
             sp<CameraProviderManager> manager) {
         return (static_cast<HidlCamera3DeviceInjectionMethods *>(
                 mInjectionMethods.get()))->injectionInitialize(injectedCamId, manager, this);
@@ -914,7 +900,6 @@ status_t HidlCamera3Device::HidlHalInterface::configureStreams(
     requestedConfiguration3_2.streams.resize(config->num_streams);
     requestedConfiguration3_4.streams.resize(config->num_streams);
     requestedConfiguration3_7.streams.resize(config->num_streams);
-    mHalBufManagedStreamIds.clear();
     for (size_t i = 0; i < config->num_streams; i++) {
         device::V3_2::Stream &dst3_2 = requestedConfiguration3_2.streams[i];
         device::V3_4::Stream &dst3_4 = requestedConfiguration3_4.streams[i];
@@ -928,9 +913,6 @@ status_t HidlCamera3Device::HidlHalInterface::configureStreams(
         switch (src->stream_type) {
             case CAMERA_STREAM_OUTPUT:
                 streamType = StreamType::OUTPUT;
-                if (flags::session_hal_buf_manager() && mUseHalBufManager) {
-                    mHalBufManagedStreamIds.insert(streamId);
-                }
                 break;
             case CAMERA_STREAM_INPUT:
                 streamType = StreamType::INPUT;
@@ -940,7 +922,6 @@ status_t HidlCamera3Device::HidlHalInterface::configureStreams(
                         __FUNCTION__, streamId, config->streams[i]->stream_type);
                 return BAD_VALUE;
         }
-
         dst3_2.id = streamId;
         dst3_2.streamType = streamType;
         dst3_2.width = src->width;
@@ -960,7 +941,7 @@ status_t HidlCamera3Device::HidlHalInterface::configureStreams(
         }
         dst3_4.v3_2 = dst3_2;
         dst3_4.bufferSize = bufferSizes[i];
-        if (!src->physical_camera_id.empty()) {
+        if (src->physical_camera_id != nullptr) {
             dst3_4.physicalCameraId = src->physical_camera_id;
         }
         dst3_7.v3_4 = dst3_4;
@@ -1278,7 +1259,7 @@ status_t HidlCamera3Device::HidlHalInterface::configureInjectedStreams(
         }
         dst3_4.v3_2 = dst3_2;
         dst3_4.bufferSize = bufferSizes[i];
-        if (!src->physical_camera_id.empty()) {
+        if (src->physical_camera_id != nullptr) {
             dst3_4.physicalCameraId = src->physical_camera_id;
         }
         dst3_7.v3_4 = dst3_4;
@@ -1758,7 +1739,7 @@ status_t HidlCamera3Device::HidlRequestThread::switchToOffline(
 }
 
 status_t HidlCamera3Device::HidlCamera3DeviceInjectionMethods::injectionInitialize(
-        const std::string& injectedCamId, sp<CameraProviderManager> manager,
+        const String8& injectedCamId, sp<CameraProviderManager> manager,
         const sp<android::hardware::camera::device::V3_2::ICameraDeviceCallback>&
                 callback) {
     ATRACE_CALL();
@@ -1778,7 +1759,7 @@ status_t HidlCamera3Device::HidlCamera3DeviceInjectionMethods::injectionInitiali
     mInjectedCamId = injectedCamId;
     sp<ICameraDeviceSession> session;
     ATRACE_BEGIN("Injection CameraHal::openSession");
-    status_t res = manager->openHidlSession(injectedCamId, callback,
+    status_t res = manager->openHidlSession(injectedCamId.string(), callback,
                                           /*out*/ &session);
     ATRACE_END();
     if (res != OK) {

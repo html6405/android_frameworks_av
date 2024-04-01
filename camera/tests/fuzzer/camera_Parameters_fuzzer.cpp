@@ -16,18 +16,12 @@
 
 #include <CameraParameters.h>
 #include <CameraParameters2.h>
-#include <camera/StringUtils.h>
 #include <fcntl.h>
 #include <fuzzer/FuzzedDataProvider.h>
 #include <utils/String16.h>
-#include <camera/StringUtils.h>
-
-#include <functional>
 
 using namespace std;
 using namespace android;
-
-constexpr int8_t kMaxBytes = 20;
 
 string kValidFormats[] = {
         CameraParameters::PIXEL_FORMAT_YUV422SP,      CameraParameters::PIXEL_FORMAT_YUV420SP,
@@ -39,22 +33,26 @@ string kValidFormats[] = {
 class CameraParametersFuzzer {
   public:
     void process(const uint8_t* data, size_t size);
+    ~CameraParametersFuzzer() {
+        delete mCameraParameters;
+        delete mCameraParameters2;
+    }
 
   private:
     void invokeCameraParameters();
     template <class type>
-    void initCameraParameters(unique_ptr<type>& obj);
+    void initCameraParameters(type** obj);
     template <class type>
-    void callCameraParametersAPIs(unique_ptr<type>& obj);
-    unique_ptr<CameraParameters> mCameraParameters;
-    unique_ptr<CameraParameters2> mCameraParameters2;
+    void cameraParametersCommon(type* obj);
+    CameraParameters* mCameraParameters = nullptr;
+    CameraParameters2* mCameraParameters2 = nullptr;
     FuzzedDataProvider* mFDP = nullptr;
 };
 
 template <class type>
-void CameraParametersFuzzer::initCameraParameters(unique_ptr<type>& obj) {
+void CameraParametersFuzzer::initCameraParameters(type** obj) {
     if (mFDP->ConsumeBool()) {
-        obj = make_unique<type>();
+        *obj = new type();
     } else {
         string params;
         if (mFDP->ConsumeBool()) {
@@ -62,176 +60,94 @@ void CameraParametersFuzzer::initCameraParameters(unique_ptr<type>& obj) {
             int32_t height = mFDP->ConsumeIntegral<int32_t>();
             int32_t minFps = mFDP->ConsumeIntegral<int32_t>();
             int32_t maxFps = mFDP->ConsumeIntegral<int32_t>();
-            params = mFDP->ConsumeBool() ? mFDP->ConsumeRandomLengthString(kMaxBytes).c_str()
-                                         : CameraParameters::KEY_SUPPORTED_VIDEO_SIZES;
+            params = CameraParameters::KEY_SUPPORTED_VIDEO_SIZES;
             params += '=' + to_string(width) + 'x' + to_string(height) + ';';
             if (mFDP->ConsumeBool()) {
-                params += mFDP->ConsumeBool() ? mFDP->ConsumeRandomLengthString(kMaxBytes).c_str()
-                                              : CameraParameters::KEY_PREVIEW_FPS_RANGE;
+                params += CameraParameters::KEY_PREVIEW_FPS_RANGE;
                 params += '=' + to_string(minFps) + ',' + to_string(maxFps) + ';';
             }
             if (mFDP->ConsumeBool()) {
-                params += mFDP->ConsumeBool() ? mFDP->ConsumeRandomLengthString(kMaxBytes).c_str()
-                                              : CameraParameters::KEY_SUPPORTED_PICTURE_SIZES;
+                params += CameraParameters::KEY_SUPPORTED_PICTURE_SIZES;
                 params += '=' + to_string(width) + 'x' + to_string(height) + ';';
             }
             if (mFDP->ConsumeBool()) {
-                params += mFDP->ConsumeBool() ? mFDP->ConsumeRandomLengthString(kMaxBytes).c_str()
-                                              : CameraParameters::KEY_SUPPORTED_PREVIEW_FORMATS;
-                params += '=' +
-                          (mFDP->ConsumeBool() ? mFDP->ConsumeRandomLengthString(kMaxBytes).c_str()
-                                               : mFDP->PickValueInArray(kValidFormats)) + ';';
+                params += CameraParameters::KEY_SUPPORTED_PREVIEW_FORMATS;
+                params += '=' + mFDP->PickValueInArray(kValidFormats) + ';';
             }
         } else {
-            params = mFDP->ConsumeRandomLengthString(kMaxBytes);
+            params = mFDP->ConsumeRandomLengthString();
         }
-        obj = make_unique<type>(toString8(params));
+        *obj = new type(String8(params.c_str()));
     }
 }
 
 template <class type>
-void CameraParametersFuzzer::callCameraParametersAPIs(unique_ptr<type>& obj) {
+void CameraParametersFuzzer::cameraParametersCommon(type* obj) {
+    Vector<Size> supportedPreviewSizes;
+    obj->getSupportedPreviewSizes(supportedPreviewSizes);
+    int32_t previewWidth = mFDP->ConsumeIntegral<int32_t>();
+    int32_t previewHeight = mFDP->ConsumeIntegral<int32_t>();
+    obj->setPreviewSize(previewWidth, previewHeight);
+    obj->getPreviewSize(&previewWidth, &previewHeight);
+
     Vector<Size> supportedVideoSizes;
-    while (mFDP->remaining_bytes()) {
-        auto callCameraUtilsAPIs = mFDP->PickValueInArray<const std::function<void()>>({
-                [&]() {
-                    Vector<Size> supportedPreviewSizes;
-                    obj->getSupportedPreviewSizes(supportedPreviewSizes);
-                },
-                [&]() {
-                    int32_t previewWidth = mFDP->ConsumeIntegral<int32_t>();
-                    int32_t previewHeight = mFDP->ConsumeIntegral<int32_t>();
-                    obj->setPreviewSize(previewWidth, previewHeight);
-                },
-                [&]() {
-                    int32_t previewWidth, previewHeight;
-                    obj->getPreviewSize(&previewWidth, &previewHeight);
-                },
-                [&]() { obj->getSupportedVideoSizes(supportedVideoSizes); },
-                [&]() {
-                    int32_t videoWidth, videoHeight;
-                    if (supportedVideoSizes.size()) {
-                        int32_t idx = mFDP->ConsumeIntegralInRange<int32_t>(
-                                0, supportedVideoSizes.size() - 1);
-                        videoWidth = mFDP->ConsumeBool() ? supportedVideoSizes[idx].width
-                                                         : mFDP->ConsumeIntegral<int32_t>();
-                        videoHeight = mFDP->ConsumeBool() ? supportedVideoSizes[idx].height
-                                                          : mFDP->ConsumeIntegral<int32_t>();
-                        obj->setVideoSize(videoWidth, videoHeight);
-                    }
-                },
-                [&]() {
-                    int32_t videoWidth, videoHeight;
-                    obj->getVideoSize(&videoWidth, &videoHeight);
-                },
-                [&]() {
-                    int32_t preferredVideoWidth, preferredVideoHeight;
-                    obj->getPreferredPreviewSizeForVideo(&preferredVideoWidth,
-                                                         &preferredVideoHeight);
-                },
-                [&]() {
-                    int32_t fps = mFDP->ConsumeIntegral<int32_t>();
-                    obj->setPreviewFrameRate(fps);
-                },
-                [&]() { obj->getPreviewFrameRate(); },
-                [&]() {
-                    string previewFormat = mFDP->ConsumeBool()
-                                                   ? mFDP->PickValueInArray(kValidFormats)
-                                                   : mFDP->ConsumeRandomLengthString(kMaxBytes);
-                    obj->setPreviewFormat(previewFormat.c_str());
-                },
-                [&]() {
-                    int32_t pictureWidth = mFDP->ConsumeIntegral<int32_t>();
-                    int32_t pictureHeight = mFDP->ConsumeIntegral<int32_t>();
-                    obj->setPictureSize(pictureWidth, pictureHeight);
-                },
-                [&]() {
-                    int32_t pictureWidth, pictureHeight;
-                    obj->getPictureSize(&pictureWidth, &pictureHeight);
-                },
-                [&]() {
-                    Vector<Size> supportedPictureSizes;
-                    obj->getSupportedPictureSizes(supportedPictureSizes);
-                },
-                [&]() {
-                    string pictureFormat = mFDP->ConsumeBool()
-                                                   ? mFDP->PickValueInArray(kValidFormats)
-                                                   : mFDP->ConsumeRandomLengthString(kMaxBytes);
-                    obj->setPictureFormat(pictureFormat.c_str());
-                },
-                [&]() { obj->getPictureFormat(); },
-                [&]() {
-                    if (mFDP->ConsumeBool()) {
-                        obj->dump();
-                    } else {
-                        int32_t fd = open("/dev/null", O_CLOEXEC | O_RDWR | O_CREAT);
-                        Vector<String16> args = {};
-                        obj->dump(fd, args);
-                        close(fd);
-                    }
-                },
-                [&]() { obj->flatten(); },
-                [&]() {
-                    string key = mFDP->ConsumeRandomLengthString(kMaxBytes);
-                    float value = mFDP->ConsumeFloatingPoint<float>();
-                    obj->setFloat(key.c_str(), value);
-                },
-                [&]() {
-                    string key = mFDP->ConsumeRandomLengthString(kMaxBytes);
-                    obj->getFloat(key.c_str());
-                },
-                [&]() { obj->getPreviewFormat(); },
-                [&]() {
-                    string key = mFDP->ConsumeRandomLengthString(kMaxBytes);
-                    obj->remove(key.c_str());
-                },
-                [&]() {
-                    if (std::is_same_v<type, CameraParameters>) {
-                        string format = mFDP->ConsumeBool()
-                                                ? mFDP->ConsumeRandomLengthString(kMaxBytes)
-                                                : mFDP->PickValueInArray(kValidFormats);
-                        mCameraParameters->previewFormatToEnum(format.c_str());
-                    }
-                },
-                [&]() {
-                    if (std::is_same_v<type, CameraParameters>) {
-                        mCameraParameters->isEmpty();
-                    }
-                },
-                [&]() {
-                    if (std::is_same_v<type, CameraParameters>) {
-                        Vector<int32_t> formats;
-                        mCameraParameters->getSupportedPreviewFormats(formats);
-                    }
-                },
-                [&]() {
-                    if (std::is_same_v<type, CameraParameters2>) {
-                        string key1 = mFDP->ConsumeRandomLengthString(kMaxBytes);
-                        string key2 = mFDP->ConsumeRandomLengthString(kMaxBytes);
-                        int32_t order;
-                        mCameraParameters2->compareSetOrder(key1.c_str(), key2.c_str(), &order);
-                    }
-                },
-                [&]() {
-                    if (std::is_same_v<type, CameraParameters2>) {
-                        int32_t minFps = mFDP->ConsumeIntegral<int32_t>();
-                        int32_t maxFps = mFDP->ConsumeIntegral<int32_t>();
-                        mCameraParameters2->setPreviewFpsRange(minFps, maxFps);
-                    }
-                },
-        });
-        callCameraUtilsAPIs();
+    obj->getSupportedVideoSizes(supportedVideoSizes);
+    if (supportedVideoSizes.size() != 0) {
+        int32_t videoWidth, videoHeight, preferredVideoWidth, preferredVideoHeight;
+        if (mFDP->ConsumeBool()) {
+            int32_t idx = mFDP->ConsumeIntegralInRange<int32_t>(0, supportedVideoSizes.size() - 1);
+            obj->setVideoSize(supportedVideoSizes[idx].width, supportedVideoSizes[idx].height);
+        } else {
+            videoWidth = mFDP->ConsumeIntegral<int32_t>();
+            videoHeight = mFDP->ConsumeIntegral<int32_t>();
+            obj->setVideoSize(videoWidth, videoHeight);
+        }
+        obj->getVideoSize(&videoWidth, &videoHeight);
+        obj->getPreferredPreviewSizeForVideo(&preferredVideoWidth, &preferredVideoHeight);
+    }
+
+    int32_t fps = mFDP->ConsumeIntegral<int32_t>();
+    obj->setPreviewFrameRate(fps);
+    obj->getPreviewFrameRate();
+    string previewFormat = mFDP->ConsumeBool() ? mFDP->PickValueInArray(kValidFormats)
+                                               : mFDP->ConsumeRandomLengthString();
+    obj->setPreviewFormat(previewFormat.c_str());
+
+    int32_t pictureWidth = mFDP->ConsumeIntegral<int32_t>();
+    int32_t pictureHeight = mFDP->ConsumeIntegral<int32_t>();
+    Vector<Size> supportedPictureSizes;
+    obj->setPictureSize(pictureWidth, pictureHeight);
+    obj->getPictureSize(&pictureWidth, &pictureHeight);
+    obj->getSupportedPictureSizes(supportedPictureSizes);
+    string pictureFormat = mFDP->ConsumeBool() ? mFDP->PickValueInArray(kValidFormats)
+                                               : mFDP->ConsumeRandomLengthString();
+    obj->setPictureFormat(pictureFormat.c_str());
+    obj->getPictureFormat();
+
+    if (mFDP->ConsumeBool()) {
+        obj->dump();
+    } else {
+        int32_t fd = open("/dev/null", O_CLOEXEC | O_RDWR | O_CREAT);
+        Vector<String16> args = {};
+        obj->dump(fd, args);
+        close(fd);
     }
 }
 
 void CameraParametersFuzzer::invokeCameraParameters() {
-    if (mFDP->ConsumeBool()) {
-        initCameraParameters<CameraParameters>(mCameraParameters);
-        callCameraParametersAPIs(mCameraParameters);
-    } else {
-        initCameraParameters<CameraParameters2>(mCameraParameters2);
-        callCameraParametersAPIs(mCameraParameters2);
-    }
+    initCameraParameters<CameraParameters>(&mCameraParameters);
+    cameraParametersCommon<CameraParameters>(mCameraParameters);
+    initCameraParameters<CameraParameters2>(&mCameraParameters2);
+    cameraParametersCommon<CameraParameters2>(mCameraParameters2);
+
+    int32_t minFPS, maxFPS;
+    mCameraParameters->getPreviewFpsRange(&minFPS, &maxFPS);
+    string format = mFDP->ConsumeBool() ? mFDP->PickValueInArray(kValidFormats)
+                                        : mFDP->ConsumeRandomLengthString();
+    mCameraParameters->previewFormatToEnum(format.c_str());
+    mCameraParameters->isEmpty();
+    Vector<int32_t> formats;
+    mCameraParameters->getSupportedPreviewFormats(formats);
 }
 
 void CameraParametersFuzzer::process(const uint8_t* data, size_t size) {

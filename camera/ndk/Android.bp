@@ -112,7 +112,6 @@ cc_library_shared {
 
 cc_library_shared {
     name: "libcamera2ndk_vendor",
-    cpp_std: "gnu++17",
     vendor: true,
     srcs: [
         "ndk_vendor/impl/ACameraDevice.cpp",
@@ -167,6 +166,11 @@ cc_library_shared {
     include_dirs: [
         "system/media/private/camera/include",
     ],
+    product_variables: {
+        pdk: {
+            enabled: false,
+        },
+    },
 }
 
 cc_test {
@@ -179,7 +183,6 @@ cc_test {
     shared_libs: [
         "libcamera2ndk_vendor",
         "libcamera_metadata",
-        "libhidlbase",
         "libmediandk",
         "libnativewindow",
         "libutils",
