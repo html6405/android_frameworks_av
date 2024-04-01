@@ -3608,9 +3608,6 @@ bool Camera3Device::RequestThread::threadLoop() {
         captureRequest->mRotateAndCropChanged = (mComposerOutput && !mOverrideToPortrait) ? false :
             overrideAutoRotateAndCrop(captureRequest);
         captureRequest->mAutoframingChanged = overrideAutoframing(captureRequest);
-        if (flags::inject_session_params()) {
-            injectSessionParams(captureRequest, mInjectedSessionParams);
-        }
     }
 
     // 'mNextRequests' will at this point contain either a set of HFR batched requests
@@ -3634,10 +3631,7 @@ bool Camera3Device::RequestThread::threadLoop() {
         if (res == OK) {
             sp<Camera3Device> parent = mParent.promote();
             if (parent != nullptr) {
-                if (parent->reconfigureCamera(mLatestSessionParams, mStatusId)) {
-                    mForceNewRequestAfterReconfigure = true;
-                    mReconfigured = true;
-                }
+                mReconfigured |= parent->reconfigureCamera(mLatestSessionParams, mStatusId);
             }
 
             if (mNextRequests[0].captureRequest->mInputStream != nullptr) {
@@ -3768,20 +3762,12 @@ status_t Camera3Device::RequestThread::prepareHalRequests() {
                 (mPrevRequest != captureRequest || triggersMixedIn ||
                          captureRequest->mRotateAndCropChanged ||
                          captureRequest->mAutoframingChanged ||
-                         captureRequest->mTestPatternChanged || settingsOverrideChanged ||
-                         (flags::inject_session_params() && mForceNewRequestAfterReconfigure)) &&
+                         testPatternChanged || settingsOverrideChanged) &&
                 // Request settings are all the same within one batch, so only treat the first
                 // request in a batch as new
                 !(batchedRequest && i > 0);
-
         if (newRequest) {
             std::set<std::string> cameraIdsWithZoom;
-
-            if (flags::inject_session_params() && mForceNewRequestAfterReconfigure) {
-                // This only needs to happen once.
-                mForceNewRequestAfterReconfigure = false;
-            }
-
             /**
              * HAL workaround:
              * Insert a fake trigger ID if a trigger is set but no trigger ID is
@@ -4950,45 +4936,6 @@ bool Camera3Device::RequestThread::overrideAutoframing(const sp<CaptureRequest> 
     }
 
     return false;
-}
-
-void Camera3Device::RequestThread::injectSessionParams(
-    const sp<CaptureRequest> &request,
-    const CameraMetadata& injectedSessionParams) {
-    CameraMetadata &requestMetadata = request->mSettingsList.begin()->metadata;
-    uint32_t tag_section;
-    camera_metadata_ro_entry entry;
-    for (auto tag : mSessionParamKeys) {
-        tag_section = tag >> 16;
-        if (tag_section < VENDOR_SECTION) {
-            // Only allow injection of vendor tags.
-            continue;
-        }
-        entry = injectedSessionParams.find(tag);
-        if (entry.count > 0) {
-            requestMetadata.update(entry);
-        }
-    }
-}
-
-status_t Camera3Device::RequestThread::setInjectedSessionParams(
-        const CameraMetadata& injectedSessionParams) {
-    ATRACE_CALL();
-    Mutex::Autolock l(mTriggerMutex);
-    mInjectedSessionParams = injectedSessionParams;
-    return OK;
-}
-
-status_t Camera3Device::injectSessionParams(const CameraMetadata& injectedSessionParams) {
-    ATRACE_CALL();
-    Mutex::Autolock il(mInterfaceLock);
-    Mutex::Autolock l(mLock);
-
-    if (mRequestThread == nullptr) {
-        return INVALID_OPERATION;
-    }
-
-    return mRequestThread->setInjectedSessionParams(injectedSessionParams);
 }
 
 bool Camera3Device::RequestThread::overrideTestPattern(
