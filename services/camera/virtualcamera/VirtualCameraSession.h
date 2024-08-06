@@ -25,7 +25,6 @@
 #include "VirtualCameraSessionContext.h"
 #include "aidl/android/companion/virtualcamera/IVirtualCameraCallback.h"
 #include "aidl/android/hardware/camera/device/BnCameraDeviceSession.h"
-#include "aidl/android/hardware/camera/device/CameraMetadata.h"
 #include "aidl/android/hardware/camera/device/ICameraDeviceCallback.h"
 #include "utils/Mutex.h"
 
@@ -139,8 +138,7 @@ class VirtualCameraSession
       int8_t, ::aidl::android::hardware::common::fmq::SynchronizedReadWrite>;
   std::shared_ptr<ResultMetadataQueue> mResultMetadataQueue;
 
-  aidl::android::hardware::camera::device::CameraMetadata mCurrentRequestMetadata
-      GUARDED_BY(mLock);
+  std::atomic_bool mFirstRequest{true};
 
   std::unique_ptr<VirtualCameraRenderThread> mRenderThread GUARDED_BY(mLock);
 };

@@ -33,7 +33,6 @@
 #include "android/binder_auto_utils.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "util/Util.h"
 
 namespace android {
 namespace companion {
@@ -63,7 +62,6 @@ using ::testing::SizeIs;
 
 constexpr int kInputWidth = 640;
 constexpr int kInputHeight = 480;
-const Resolution kInputResolution(kInputWidth, kInputHeight);
 
 Matcher<StreamBuffer> IsStreamBufferWithStatus(const int streamId,
                                                const int bufferId,
@@ -104,8 +102,7 @@ class VirtualCameraRenderThreadTest : public ::testing::Test {
     mMockCameraDeviceCallback =
         ndk::SharedRefBase::make<MockCameraDeviceCallback>();
     mRenderThread = std::make_unique<VirtualCameraRenderThread>(
-        *mSessionContext, kInputResolution,
-        /*reportedSensorSize*/ kInputResolution, mMockCameraDeviceCallback);
+        *mSessionContext, kInputWidth, kInputHeight, mMockCameraDeviceCallback);
   }
 
  protected:

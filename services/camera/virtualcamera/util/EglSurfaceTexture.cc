@@ -68,16 +68,6 @@ GLuint EglSurfaceTexture::updateTexture() {
   return mTextureId;
 }
 
-GLuint EglSurfaceTexture::getTextureId() const {
-  return mTextureId;
-}
-
-std::array<float, 16> EglSurfaceTexture::getTransformMatrix() {
-  std::array<float, 16> matrix;
-  mGlConsumer->getTransformMatrix(matrix.data());
-  return matrix;
-}
-
 uint32_t EglSurfaceTexture::getWidth() const {
   return mWidth;
 }

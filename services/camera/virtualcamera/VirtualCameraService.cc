@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,8 +41,6 @@ namespace companion {
 namespace virtualcamera {
 
 using ::aidl::android::companion::virtualcamera::Format;
-using ::aidl::android::companion::virtualcamera::LensFacing;
-using ::aidl::android::companion::virtualcamera::SensorOrientation;
 using ::aidl::android::companion::virtualcamera::SupportedStreamConfiguration;
 using ::aidl::android::companion::virtualcamera::VirtualCameraConfiguration;
 
@@ -50,7 +48,6 @@ namespace {
 
 constexpr int kVgaWidth = 640;
 constexpr int kVgaHeight = 480;
-constexpr int kMaxFps = 60;
 constexpr char kEnableTestCameraCmd[] = "enable_test_camera";
 constexpr char kDisableTestCameraCmd[] = "disable_test_camera";
 constexpr char kShellCmdHelp[] = R"(
@@ -72,29 +69,13 @@ ndk::ScopedAStatus validateConfiguration(
   for (const SupportedStreamConfiguration& config :
        configuration.supportedStreamConfigs) {
     if (!isFormatSupportedForInput(config.width, config.height,
-                                   config.pixelFormat, config.maxFps)) {
+                                   config.pixelFormat)) {
       ALOGE("%s: Requested unsupported input format: %d x %d (%d)", __func__,
             config.width, config.height, static_cast<int>(config.pixelFormat));
       return ndk::ScopedAStatus::fromServiceSpecificError(
           Status::EX_ILLEGAL_ARGUMENT);
     }
   }
-
-  if (configuration.sensorOrientation != SensorOrientation::ORIENTATION_0 &&
-      configuration.sensorOrientation != SensorOrientation::ORIENTATION_90 &&
-      configuration.sensorOrientation != SensorOrientation::ORIENTATION_180 &&
-      configuration.sensorOrientation != SensorOrientation::ORIENTATION_270) {
-    return ndk::ScopedAStatus::fromServiceSpecificError(
-        Status::EX_ILLEGAL_ARGUMENT);
-  }
-
-  if (configuration.lensFacing != LensFacing::FRONT &&
-      configuration.lensFacing != LensFacing::BACK &&
-      configuration.lensFacing != LensFacing::EXTERNAL) {
-    return ndk::ScopedAStatus::fromServiceSpecificError(
-        Status::EX_ILLEGAL_ARGUMENT);
-  }
-
   return ndk::ScopedAStatus::ok();
 }
 
@@ -140,8 +121,10 @@ ndk::ScopedAStatus VirtualCameraService::registerCamera(
     return ndk::ScopedAStatus::ok();
   }
 
+  // TODO(b/301023410) Validate configuration and pass it to the camera.
   std::shared_ptr<VirtualCameraDevice> camera =
-      mVirtualCameraProvider->createCamera(configuration);
+      mVirtualCameraProvider->createCamera(configuration.supportedStreamConfigs,
+                                           configuration.virtualCameraCallback);
   if (camera == nullptr) {
     ALOGE("Failed to create camera for binder token 0x%" PRIxPTR,
           reinterpret_cast<uintptr_t>(token.get()));
@@ -258,11 +241,8 @@ void VirtualCameraService::enableTestCameraCmd(const int out, const int err) {
 
   bool ret;
   VirtualCameraConfiguration configuration;
-  configuration.supportedStreamConfigs.push_back({.width = kVgaWidth,
-                                                  .height = kVgaHeight,
-                                                  Format::YUV_420_888,
-                                                  .maxFps = kMaxFps});
-  configuration.lensFacing = LensFacing::EXTERNAL;
+  configuration.supportedStreamConfigs.push_back(
+      {.width = kVgaWidth, .height = kVgaHeight, Format::YUV_420_888});
   registerCamera(mTestCameraToken, configuration, &ret);
   if (ret) {
     dprintf(out, "Successfully registered test camera %s",

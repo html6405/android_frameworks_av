@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package android.companion.virtualcamera;
 
 import android.companion.virtualcamera.IVirtualCameraCallback;
-import android.companion.virtualcamera.LensFacing;
-import android.companion.virtualcamera.SensorOrientation;
 import android.companion.virtualcamera.SupportedStreamConfiguration;
 
 /**
@@ -29,6 +26,4 @@ import android.companion.virtualcamera.SupportedStreamConfiguration;
 parcelable VirtualCameraConfiguration {
     SupportedStreamConfiguration[] supportedStreamConfigs;
     IVirtualCameraCallback virtualCameraCallback;
-    SensorOrientation sensorOrientation = SensorOrientation.ORIENTATION_0;
-    LensFacing lensFacing;
 }

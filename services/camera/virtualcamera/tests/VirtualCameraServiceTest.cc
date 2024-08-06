@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 The Android Open Source Project
+ * Copyright (C) 2023 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,8 +39,6 @@ namespace {
 
 using ::aidl::android::companion::virtualcamera::BnVirtualCameraCallback;
 using ::aidl::android::companion::virtualcamera::Format;
-using ::aidl::android::companion::virtualcamera::LensFacing;
-using ::aidl::android::companion::virtualcamera::SensorOrientation;
 using ::aidl::android::companion::virtualcamera::VirtualCameraConfiguration;
 using ::aidl::android::hardware::camera::common::CameraDeviceStatus;
 using ::aidl::android::hardware::camera::common::TorchModeStatus;
@@ -58,25 +56,16 @@ using ::testing::SizeIs;
 
 constexpr int kVgaWidth = 640;
 constexpr int kVgaHeight = 480;
-constexpr int kMaxFps = 30;
-constexpr SensorOrientation kSensorOrientation =
-    SensorOrientation::ORIENTATION_0;
-constexpr LensFacing kLensFacing = LensFacing::FRONT;
 constexpr char kCreateVirtualDevicePermissions[] =
     "android.permission.CREATE_VIRTUAL_DEVICE";
 
 const VirtualCameraConfiguration kEmptyVirtualCameraConfiguration;
 
 VirtualCameraConfiguration createConfiguration(const int width, const int height,
-                                               const Format format,
-                                               const int maxFps) {
+                                               const Format format) {
   VirtualCameraConfiguration configuration;
-  configuration.supportedStreamConfigs.push_back({.width = width,
-                                                  .height = height,
-                                                  .pixelFormat = format,
-                                                  .maxFps = maxFps});
-  configuration.sensorOrientation = kSensorOrientation;
-  configuration.lensFacing = kLensFacing;
+  configuration.supportedStreamConfigs.push_back(
+      {.width = width, .height = height, .pixelFormat = format});
   return configuration;
 }
 
@@ -161,7 +150,7 @@ class VirtualCameraServiceTest : public ::testing::Test {
   int mDevNullFd;
 
   VirtualCameraConfiguration mVgaYUV420OnlyConfiguration =
-      createConfiguration(kVgaWidth, kVgaHeight, Format::YUV_420_888, kMaxFps);
+      createConfiguration(kVgaWidth, kVgaHeight, Format::YUV_420_888);
 };
 
 TEST_F(VirtualCameraServiceTest, RegisterCameraWithYuvInputSucceeds) {
@@ -184,7 +173,7 @@ TEST_F(VirtualCameraServiceTest, RegisterCameraWithRgbaInputSucceeds) {
   bool aidlRet;
 
   VirtualCameraConfiguration config =
-      createConfiguration(kVgaWidth, kVgaHeight, Format::RGBA_8888, kMaxFps);
+      createConfiguration(kVgaWidth, kVgaHeight, Format::RGBA_8888);
 
   ASSERT_TRUE(mCameraService->registerCamera(ndkToken, config, &aidlRet).isOk());
 
@@ -219,7 +208,7 @@ TEST_F(VirtualCameraServiceTest, ConfigurationWithUnsupportedPixelFormatFails) {
   bool aidlRet;
 
   VirtualCameraConfiguration config =
-      createConfiguration(kVgaWidth, kVgaHeight, Format::UNKNOWN, kMaxFps);
+      createConfiguration(kVgaWidth, kVgaHeight, Format::UNKNOWN);
 
   ASSERT_FALSE(
       mCameraService->registerCamera(mNdkOwnerToken, config, &aidlRet).isOk());
@@ -230,7 +219,7 @@ TEST_F(VirtualCameraServiceTest, ConfigurationWithUnsupportedPixelFormatFails) {
 TEST_F(VirtualCameraServiceTest, ConfigurationWithTooHighResFails) {
   bool aidlRet;
   VirtualCameraConfiguration config =
-      createConfiguration(1000000, 1000000, Format::YUV_420_888, kMaxFps);
+      createConfiguration(1000000, 1000000, Format::YUV_420_888);
 
   ASSERT_FALSE(
       mCameraService->registerCamera(mNdkOwnerToken, config, &aidlRet).isOk());
@@ -241,7 +230,7 @@ TEST_F(VirtualCameraServiceTest, ConfigurationWithTooHighResFails) {
 TEST_F(VirtualCameraServiceTest, ConfigurationWithUnalignedResolutionFails) {
   bool aidlRet;
   VirtualCameraConfiguration config =
-      createConfiguration(641, 481, Format::YUV_420_888, kMaxFps);
+      createConfiguration(641, 481, Format::YUV_420_888);
 
   ASSERT_FALSE(
       mCameraService->registerCamera(mNdkOwnerToken, config, &aidlRet).isOk());
@@ -252,29 +241,7 @@ TEST_F(VirtualCameraServiceTest, ConfigurationWithUnalignedResolutionFails) {
 TEST_F(VirtualCameraServiceTest, ConfigurationWithNegativeResolutionFails) {
   bool aidlRet;
   VirtualCameraConfiguration config =
-      createConfiguration(-1, kVgaHeight, Format::YUV_420_888, kMaxFps);
-
-  ASSERT_FALSE(
-      mCameraService->registerCamera(mNdkOwnerToken, config, &aidlRet).isOk());
-  EXPECT_FALSE(aidlRet);
-  EXPECT_THAT(getCameraIds(), IsEmpty());
-}
-
-TEST_F(VirtualCameraServiceTest, ConfigurationWithTooLowMaxFpsFails) {
-  bool aidlRet;
-  VirtualCameraConfiguration config =
-      createConfiguration(kVgaWidth, kVgaHeight, Format::YUV_420_888, 0);
-
-  ASSERT_FALSE(
-      mCameraService->registerCamera(mNdkOwnerToken, config, &aidlRet).isOk());
-  EXPECT_FALSE(aidlRet);
-  EXPECT_THAT(getCameraIds(), IsEmpty());
-}
-
-TEST_F(VirtualCameraServiceTest, ConfigurationWithTooHighMaxFpsFails) {
-  bool aidlRet;
-  VirtualCameraConfiguration config =
-      createConfiguration(kVgaWidth, kVgaHeight, Format::YUV_420_888, 90);
+      createConfiguration(-1, kVgaHeight, Format::YUV_420_888);
 
   ASSERT_FALSE(
       mCameraService->registerCamera(mNdkOwnerToken, config, &aidlRet).isOk());
