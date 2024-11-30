@@ -35,6 +35,7 @@
 #include <utils/Trace.h>
 
 #include <aidl/vendor/samsung/hardware/camera/provider/ISehCameraProvider.h>
+#include <aidl/vendor/mediatek/hardware/agolddaemon/IAgoldDaemon.h>
 
 namespace {
 const bool kEnableLazyHal(property_get_bool("ro.camera.enableLazyHal", false));
@@ -160,6 +161,15 @@ status_t AidlProviderInfo::initializeAidlProvider(
     ALOGV("%s: Setting device state for %s: 0x%" PRIx64,
             __FUNCTION__, mProviderName.c_str(), mDeviceState);
     notifyDeviceStateChange(currentDeviceState);
+
+    if (true) {
+        auto svc = aidl::vendor::mediatek::hardware::agolddaemon::IAgoldDaemon::fromBinder(
+                ndk::SpAIBinder(AServiceManager_checkService("vendor.mediatek.hardware.agolddaemon.IAgoldDaemon/default")));
+        if (svc != nullptr) {
+            ALOGE("Got agold aidl hal");
+            svc->setNotGsi("NotGsi");
+        }
+    }
 
     res = setUpVendorTags();
     if (res != OK) {
