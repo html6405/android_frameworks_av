@@ -972,6 +972,11 @@ MediaProfiles::getInstance()
         } else {
             sInstance = createInstanceFromXmlFile(value);
         }
+        if (sInstance == NULL) {
+            ALOGW("Failed to create media profiles from XML. "
+                    "Using the default instance instead.");
+            sInstance = createDefaultInstance();
+        }
         CHECK(sInstance != NULL);
         sInstance->checkAndAddRequiredProfilesIfNecessary();
         sIsInitialized = true;
@@ -1213,8 +1218,11 @@ bool MediaProfiles::checkXmlFile(const char* xmlFile) {
 /*static*/ MediaProfiles*
 MediaProfiles::createInstanceFromXmlFile(const char *xml)
 {
-    FILE *fp = NULL;
-    CHECK((fp = fopen(xml, "r")));
+    FILE *fp = fopen(xml, "r");
+    if (fp == NULL) {
+        ALOGE("failed to open media profiles file '%s'", xml);
+        return NULL;
+    }
 
     XML_Parser parser = ::XML_ParserCreate(NULL);
     CHECK(parser != NULL);
