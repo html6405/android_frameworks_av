@@ -255,7 +255,8 @@ public:
             mMapFd = -1;
         }
         if (mInit == C2_OK) {
-            if (mBuffer >= 0) {
+            // Old ION handles may be kernel pointers with the sign bit set.
+            if (mBuffer != -1) {
                 (void)ion_free(mIonFd, mBuffer);
             }
             native_handle_close(&mHandle);
