@@ -7272,19 +7272,23 @@ status_t MediaCodec::onReleaseOutputBuffer(const sp<AMessage> &msg) {
         info->mData.clear();
     }
 
+    int64_t mediaTimeUs = INT64_MIN;
+    int64_t renderTimeNs = 0;
+    bool noRenderTime = false;
     if (render && buffer->size() != 0) {
-        int64_t mediaTimeUs = INT64_MIN;
         buffer->meta()->findInt64("timeUs", &mediaTimeUs);
-
-        bool noRenderTime = false;
-        int64_t renderTimeNs = 0;
         if (!msg->findInt64("timestampNs", &renderTimeNs)) {
-            // use media timestamp if client did not request a specific render timestamp
-            ALOGV("using buffer PTS of %lld", (long long)mediaTimeUs);
-            renderTimeNs = mediaTimeUs * 1000;
+            // A stale or missing PTS must not overflow the conversion after a flush.
             noRenderTime = true;
+            if (__builtin_mul_overflow(mediaTimeUs, int64_t{1000}, &renderTimeNs)) {
+                ALOGW("Discarding output buffer with unrepresentable PTS: %lld us (%s)",
+                      (long long)mediaTimeUs, mComponentName.c_str());
+                render = 0;
+            }
         }
+    }
 
+    if (render && buffer->size() != 0) {
         if (mSoftRenderer != NULL) {
             std::list<FrameRenderTracker::Info> doneFrames = mSoftRenderer->render(
                     buffer->data(), buffer->size(), mediaTimeUs, renderTimeNs,
